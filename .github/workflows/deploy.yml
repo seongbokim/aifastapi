@@ -10,43 +10,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ 코드 체크아웃
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ SSH 키 설정 (Bastion 접속용)
       - name: Setup SSH key for Bastion
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.BASTION_KEY }}" > ~/.ssh/deploy.key
           chmod 600 ~/.ssh/deploy.key
-
-          # Bastion 호스트 키 등록
           ssh-keyscan -T 5 -H ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts || true
 
-      # 3️⃣ app 폴더만 Bastion 서버로 전송
       - name: Upload app folder to Bastion
         run: |
-          ssh -i ~/.ssh/deploy.key \
-            ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} \
+          ssh -i ~/.ssh/deploy.key ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} \
             "mkdir -p ~/FastAPI_TMP/app && rm -rf ~/FastAPI_TMP/app/*"
 
           rsync -avz -e "ssh -i ~/.ssh/deploy.key" \
             ./app/ \
             ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }}:~/FastAPI_TMP/app/
 
-      # 4️⃣ Bastion → FastAPI 서버로 전송 + uvicorn 실행 (ssh fastapi2a 사용)
       - name: Deploy to FastAPI server via Bastion
         run: |
-          ssh -i ~/.ssh/deploy.key ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} << 'EOF'
+          ssh -i ~/.ssh/deploy.key ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} bash -s << 'EOF'
             # Bastion에서 FastAPI 서버 접속 가능
-            rsync -avz --delete \
-              /home/ubuntu/FastAPI_TMP/app/ \
-              fastapi2a:/home/ubuntu/fastapiBack1/app
+            rsync -avz --delete /home/ubuntu/FastAPI_TMP/app/ fastapi2a:/home/ubuntu/fastapiBack1/app
 
-            ssh fastapi2a << 'INNER'
+            ssh fastapi2a bash -s << 'INNER'
               cd /home/ubuntu/fastapiBack1
               source .venv/bin/activate
               ./start.sh
-            INNER
+INNER
 EOF
