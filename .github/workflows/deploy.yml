@@ -22,22 +22,12 @@ jobs:
 
       - name: Upload app folder to Bastion
         run: |
-          ssh -i ~/.ssh/deploy.key ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} \
-            "mkdir -p ~/FastAPI_TMP/app && rm -rf ~/FastAPI_TMP/app/*"
+          ssh -i ~/.ssh/deploy.key ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} "mkdir -p ~/FastAPI_TMP/app && rm -rf ~/FastAPI_TMP/app/*"
+          rsync -avz -e "ssh -i ~/.ssh/deploy.key" ./app/ ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }}:~/FastAPI_TMP/app/
 
-          rsync -avz -e "ssh -i ~/.ssh/deploy.key" \
-            ./app/ \
-            ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }}:~/FastAPI_TMP/app/
-
-      - name: Deploy to FastAPI server via Bastion
+      - name: Deploy app to FastAPI server via Bastion
         run: |
-          ssh -i ~/.ssh/deploy.key ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} bash -s << 'EOF'
-            # Bastion에서 FastAPI 서버 접속 가능
-            rsync -avz --delete /home/ubuntu/FastAPI_TMP/app/ fastapi2a:/home/ubuntu/fastapiBack1/app
-
-            ssh fastapi2a bash -s << 'INNER'
-              cd /home/ubuntu/fastapiBack1
-              source .venv/bin/activate
-              ./start.sh
-INNER
-EOF
+          # Bastion에서 FastAPI 서버로 rsync
+          ssh -i ~/.ssh/deploy.key ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} \
+            "rsync -avz --delete /home/ubuntu/FastAPI_TMP/app/ fastapi2a:/home/ubuntu/fastapiBack1/app && \
+             ssh fastapi2a 'cd /home/ubuntu/fastapiBack1 && source .venv/bin/activate && ./start.sh'"
