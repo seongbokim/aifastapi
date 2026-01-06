@@ -1,4 +1,4 @@
-name: FastAPI Deploy via Bastion (app 폴더만, venv 유지)
+name: FastAPI
 
 on:
   push:
@@ -10,33 +10,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 체크
+      - name: 코드체크
         uses: actions/checkout@v4
 
-      - name: SSH키 설정
+      - name: SSH 키 설정 (Bastion 접속용)
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.BASTION_KEY }}" > ~/.ssh/deploy.key
           chmod 600 ~/.ssh/deploy.key
-          ssh-keyscan -T 5 -H ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts || true
+          
+          ssh-keyscan -T 5 -H ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -T 5 -H ${{ secrets.FASTAPI_HOST }} >> ~/.ssh/known_hosts || true
 
-      - name: app폴더만 Bastion으로 전송
+      - name: app 폴더만 Bastion 서버로 전송
         run: |
-          rsync -avz --delete \
-            ./app/ ubuntu@${{ secrets.BASTION_HOST }}:/home/ubuntu/FastAPI_TMP/app
+          ssh -i ~/.ssh/deploy.key \
+            ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} \
+            "mkdir -p ~/FastAPI_TMP/app && rm -rf ~/FastAPI_TMP/app/*"
 
-      - name: Bastion → FastAPI 서버 app 폴더 전송 + uvicorn 실행
+          rsync -avz -e "ssh -i ~/.ssh/deploy.key" \
+            ./app/ \
+            ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }}:~/FastAPI_TMP/app/
+
+      - name: Bastion → FastAPI 서버로 전송 + uvicorn 실행
         run: |
-          ssh -i ~/.ssh/deploy.key ubuntu@${{ secrets.BASTION_HOST }} << 'EOF'
-            ssh-keyscan -T 5 -H ${{ secrets.FASTAPI_HOST }} >> ~/.ssh/known_hosts
-
+          ssh -i ~/.ssh/deploy.key ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} << 'EOF'
+            # Bastion에서 FastAPI 서버에 접근 가능하다고 가정
             rsync -avz --delete \
               /home/ubuntu/FastAPI_TMP/app/ \
-              ubuntu@${{ secrets.FASTAPI_HOST }}:/home/ubuntu/fastapiBack1/app
+              fastapi2a:/home/ubuntu/fastapiBack1/app
 
-            ssh ubuntu@${{ secrets.FASTAPI_HOST }} << 'INNER'
+            ssh fastapi2a << 'INNER'
               cd /home/ubuntu/fastapiBack1
               source .venv/bin/activate
               ./start.sh
             INNER
-          EOF
+EOF
