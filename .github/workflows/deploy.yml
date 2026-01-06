@@ -1,0 +1,42 @@
+name: FastAPI Deploy via Bastion (app 폴더만, venv 유지)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 체크
+        uses: actions/checkout@v4
+
+      - name: SSH키 설정
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.BASTION_KEY }}" > ~/.ssh/bastion.key
+          chmod 600 ~/.ssh/bastion.key
+          ssh-keyscan -H ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts
+
+      - name: app폴더만 Bastion으로 전송
+        run: |
+          rsync -avz --delete \
+            ./app/ ubuntu@${{ secrets.BASTION_HOST }}:/home/ubuntu/FastAPI_TMP/app
+
+      - name: Bastion → FastAPI 서버 app 폴더 전송 + uvicorn 실행
+        run: |
+          ssh -i ~/.ssh/bastion.key ubuntu@${{ secrets.BASTION_HOST }} << 'EOF'
+            ssh-keyscan -H ${{ secrets.FASTAPI_HOST }} >> ~/.ssh/known_hosts
+
+            rsync -avz --delete \
+              /home/ubuntu/FastAPI_TMP/app/ \
+              ubuntu@${{ secrets.FASTAPI_HOST }}:/home/ubuntu/fastapiBack1/app
+
+            ssh ubuntu@${{ secrets.FASTAPI_HOST }} << 'INNER'
+              cd /home/ubuntu/fastapiBack1
+              source .venv/bin/activate
+              ./start.sh
+            INNER
+          EOF
